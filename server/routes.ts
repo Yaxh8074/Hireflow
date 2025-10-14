@@ -151,10 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const applicationId = req.params.id;
       const { status } = req.body;
 
-      // Update application status
-      const application = await storage.updateApplicationStatus(applicationId, userId, status);
-
-      // If status is 'hired', charge the hire fee
+      // If status is 'hired', check balance BEFORE updating status
       if (status === 'hired') {
         const user = await storage.getUser(userId);
         if (!user) {
@@ -165,7 +162,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (currentBalance < PRICING.SUCCESSFUL_HIRE) {
           return res.status(400).json({ message: "Insufficient credits for hire fee" });
         }
+      }
 
+      // Update application status only after balance check passes
+      const application = await storage.updateApplicationStatus(applicationId, userId, status);
+
+      // If status is 'hired', charge the hire fee
+      if (status === 'hired') {
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        const currentBalance = parseFloat(user.credits);
         const newBalance = (currentBalance - PRICING.SUCCESSFUL_HIRE).toFixed(2);
         await storage.updateUserCredits(userId, newBalance);
 
